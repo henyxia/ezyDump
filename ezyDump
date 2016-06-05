@@ -1,0 +1,60 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use File::ReadBackwards;
+
+print "Starting ezyDump\n";
+
+my $blockSize;
+my $index;
+my $volumeSize;
+
+if(!open(my $Report, '<', 'report'))
+{
+	print "Not report found, creating a new one !\n";
+	`touch report`;
+	$index = 1;
+}
+else
+{
+	my $lastEntry  = File::ReadBackwards->new('report')->readline;
+	if($lastEntry =~ /(\d+)/ )
+	{
+		$index = $1+1;
+		print "Will use $index as index\n";
+	}
+	else
+	{
+		die "An issue happened with the previous report\n";
+	}
+}
+
+mainLoop:
+print "Closing tray\n";
+system('eject -t');
+print "Reading informations\n";
+my $return = `isoinfo -d -i /dev/sr0| grep -i -E 'block size|volume size' |sed 'N;s/\\n/ /'`;
+if(!(($blockSize, $volumeSize) = $return =~ /Logical block size is: (\d+) Volume size is: (\d+)/))
+{
+	die "An issue happened with the reading\n";
+}
+print "Will use BS $blockSize and VS $volumeSize\n";
+print "Starting dump of ISO $index\n";
+my $request = 'dd if=/dev/sr0 bs='.$blockSize.' count='.$volumeSize.' |pv -s ';
+$request .= ($blockSize * $volumeSize).' |dd of='.$index.'.iso';
+print "> $request\n";
+system($request);
+print "Dump of $index done\n";
+system('eject');
+system("echo 'ISO $index DONE' >> report");
+$index++;
+print "Press ENTER to continue or any other key to stop\n";
+my $input = <STDIN>;
+chomp $input;
+if($input eq '')
+{
+	goto mainLoop;
+}
+die("Bye\n");
